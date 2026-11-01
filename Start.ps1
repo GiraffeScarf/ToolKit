@@ -2,7 +2,10 @@
 # No token, private owner/repo, or package key is stored in plaintext here.
 # Run using: powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\Start.ps1
 [CmdletBinding()]
-param()
+param(
+    # Optional: used by the generated BAT to avoid asking for a second password.
+    [Security.SecureString]$MasterSecure
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.Windows.Forms
@@ -143,20 +146,29 @@ if (-not (Test-Path -LiteralPath $encrypted -PathType Leaf)) {
     throw "bootstrap.enc missing beside Start.ps1 in $root. Download BOTH public files first."
 }
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-$secure = $null; $zipBytes = $null
+$secure = $MasterSecure; $ownsPassword = ($null -eq $MasterSecure); $zipBytes = $null
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('private-bootstrap-' + [Guid]::NewGuid().ToString('N'))
 try {
-    $secure = Get-MasterPassword
+    if ($ownsPassword) { $secure = Get-MasterPassword }
     Write-Host 'Unlocking encrypted bootstrap...' -ForegroundColor Cyan
     $zipBytes = Open-SealedBundle -Path $encrypted -Secret $secure
     [void][IO.Directory]::CreateDirectory($temp)
     Expand-PrivateBootstrap -ZipBytes $zipBytes -Folder $temp
-    Write-Host "Private bundle unlocked. Packages will be downloaded beside Start.ps1: $root" -ForegroundColor Green
-    & (Join-Path $temp 'Bootstrap.ps1') -MasterSecure $secure -OutputRoot $root
+    # All downloaded .pkg files and extracted application folders go here,
+    # regardless of where Start.ps1 itself was launched from.
+    $outputRoot = 'C:\Temp\Toolkit'  # Absolute package download and extraction folder
+    try {
+        [void][IO.Directory]::CreateDirectory($outputRoot)
+    }
+    catch {
+        throw "Cannot create package directory '$outputRoot': $($_.Exception.Message)"
+    }
+    Write-Host "Private bundle unlocked. Packages will be saved to: $outputRoot" -ForegroundColor Green
+    & (Join-Path $temp 'Bootstrap.ps1') -MasterSecure $secure -OutputRoot $outputRoot
 }
 finally {
     if ($zipBytes) { [Array]::Clear($zipBytes, 0, $zipBytes.Length) }
-    if ($secure) { $secure.Dispose() }
+    if ($ownsPassword -and $secure) { $secure.Dispose() }
     if (Test-Path -LiteralPath $temp) {
         Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
     }
