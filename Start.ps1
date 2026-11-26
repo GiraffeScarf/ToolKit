@@ -1,6 +1,3 @@
-# Public launcher: this script and bootstrap.enc are the ONLY two public files.
-# No token, private owner/repo, or package key is stored in plaintext here.
-# Run using: powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\Start.ps1
 [CmdletBinding()]
 param(
     # Optional: used by the generated BAT to avoid asking for a second password.
@@ -154,8 +151,6 @@ try {
     $zipBytes = Open-SealedBundle -Path $encrypted -Secret $secure
     [void][IO.Directory]::CreateDirectory($temp)
     Expand-PrivateBootstrap -ZipBytes $zipBytes -Folder $temp
-    # All downloaded .pkg files and extracted application folders go here,
-    # regardless of where Start.ps1 itself was launched from.
     $outputRoot = 'C:\Temp\Toolkit'  # Absolute package download and extraction folder
     try {
         [void][IO.Directory]::CreateDirectory($outputRoot)
